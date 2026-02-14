@@ -4,9 +4,10 @@ import os
 from dataclasses import dataclass
 from typing import Any, Literal
 
+import google.generativeai as genai
 from openai import OpenAI
 
-ProviderName = Literal["openai", "openrouter"]
+ProviderName = Literal["openai", "openrouter", "gemini"]
 
 
 @dataclass(frozen=True)
@@ -31,6 +32,12 @@ PROVIDERS: dict[ProviderName, ProviderSpec] = {
         # OpenRouter model IDs are typically like: "openai/gpt-4o-mini"
         default_model="openai/gpt-4o-mini",
     ),
+    "gemini": ProviderSpec(
+        name="gemini",
+        api_key_env="GEMINI_API_KEY",
+        base_url=None,
+        default_model="gemini-1.5-flash",
+    ),
 }
 
 
@@ -49,6 +56,7 @@ class LLMClient:
     Supported providers (OpenAI-compatible):
       - openai     (OPENAI_API_KEY)
       - openrouter (OPENROUTER_API_KEY, base_url=https://openrouter.ai/api/v1)
+      - gemini     (GEMINI_API_KEY)
     """
 
     def __init__(
@@ -66,21 +74,25 @@ class LLMClient:
         if not api_key:
             raise RuntimeError(f"{spec.api_key_env} not set in environment")
 
-        headers: dict[str, str] = {}
-        if self.provider == "openrouter":
-            # Optional but recommended by OpenRouter.
-            site_url = os.getenv("OPENROUTER_SITE_URL")
-            app_name = os.getenv("OPENROUTER_APP_NAME")
-            if site_url:
-                headers["HTTP-Referer"] = site_url
-            if app_name:
-                headers["X-Title"] = app_name
+        if self.provider == "gemini":
+            genai.configure(api_key=api_key)
+            self._client = None  # Not used for Gemini
+        else:
+            headers: dict[str, str] = {}
+            if self.provider == "openrouter":
+                # Optional but recommended by OpenRouter.
+                site_url = os.getenv("OPENROUTER_SITE_URL")
+                app_name = os.getenv("OPENROUTER_APP_NAME")
+                if site_url:
+                    headers["HTTP-Referer"] = site_url
+                if app_name:
+                    headers["X-Title"] = app_name
 
-        self._client = OpenAI(
-            api_key=api_key,
-            base_url=spec.base_url,
-            default_headers=headers or None,
-        )
+            self._client = OpenAI(
+                api_key=api_key,
+                base_url=spec.base_url,
+                default_headers=headers or None,
+            )
 
         self.model = (model or os.getenv("LLM_MODEL") or spec.default_model).strip()
         self.temperature = (
@@ -111,13 +123,29 @@ class LLMClient:
 
     def chat(self, *, system: str, user: str) -> str:
         """Send a system + user message and return the assistant reply."""
-        response: Any = self._client.chat.completions.create(
-            model=self.model,
-            temperature=self.temperature,
-            max_tokens=self.max_tokens,
-            messages=[
-                {"role": "system", "content": system},
-                {"role": "user", "content": user},
-            ],
-        )
-        return response.choices[0].message.content or ""
+        if self.provider == "gemini":
+            # Gemini specific chat implementation
+            model = genai.GenerativeModel(
+                model_name=self.model,
+                system_instruction=system,
+            )
+            response = model.generate_content(
+                user,
+                generation_config=genai.types.GenerationConfig(
+                    temperature=self.temperature,
+                    max_output_tokens=self.max_tokens,
+                ),
+            )
+            return response.text
+        else:
+            response: Any = self._client.chat.completions.create(
+                model=self.model,
+                temperature=self.temperature,
+                max_tokens=self.max_tokens,
+                messages=[
+                    {"role": "system", "content": system},
+                    {"role": "user", "content": user},
+                ],
+            )
+            return response.choices[0].message.content or ""
+

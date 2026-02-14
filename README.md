@@ -13,6 +13,7 @@
 - **多模型切換（OpenAI-compatible）** — 以 `provider:model` 形式切換
   - `openai:*`：直接使用 OpenAI API
   - `openrouter:*`：透過 OpenRouter 使用大量第三方模型（同為 OpenAI-compatible API）
+  - `gemini:*`：使用 Google Gemini API（需設定 `GEMINI_API_KEY`）
 
 ## 專案結構
 
@@ -57,6 +58,7 @@ cp env.example .env
 #   TAVILY_API_KEY=...
 #   並在 LLM_PROVIDER=openai 時設定 OPENAI_API_KEY
 #   或在 LLM_PROVIDER=openrouter 時設定 OPENROUTER_API_KEY
+#   或在 LLM_PROVIDER=gemini 時設定 GEMINI_API_KEY
 ```
 
 如果不用 uv：
@@ -71,10 +73,11 @@ pip install -e .
 
 本專案採用 **OpenAI-compatible** 的 `openai` Python SDK，並用 `base_url` 來切換提供商。
 
-- `LLM_PROVIDER`：`openai` 或 `openrouter`
+- `LLM_PROVIDER`：`openai`, `openrouter` 或 `gemini`
 - `LLM_MODEL`：模型 ID（依 provider 不同而不同）
   - OpenAI：例如 `gpt-4o-mini`
   - OpenRouter：通常是 `vendor/model`，例如 `anthropic/claude-3.5-sonnet`
+  - Gemini：例如 `gemini-1.5-flash`, `gemini-1.5-pro`
 - `LLM_TEMPERATURE`、`LLM_MAX_TOKENS`：成本/穩定性控制
 
 ## 使用方式
@@ -95,7 +98,7 @@ uv run python main.py
 | 指令 | 說明 |
 |------|------|
 | `/models` | 列出可用模型（範例清單） |
-| `/model <provider:model>` | 切換 LLM 模型（例如 `/model openai:gpt-4o-mini` 或 `/model openrouter:anthropic/claude-3.5-sonnet`） |
+| `/model <provider:model>` | 切換 LLM 模型（例如 `/model openai:gpt-4o-mini`, `/model openrouter:anthropic/...` 或 `/model gemini:gemini-1.5-flash`） |
 | `/help` | 顯示幫助資訊 |
 | `/quit` | 離開程式 |
 
